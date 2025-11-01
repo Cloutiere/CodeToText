@@ -1,5 +1,5 @@
-# [analysis_profiles.py]
-# [Version 1.1]
+# analysis_profiles.py
+# [Version 1.2]
 
 from __future__ import annotations
 
@@ -18,6 +18,13 @@ class AnalysisProfile(abc.ABC):
     catégorisation et de génération de rapports consolidés spécifiques à
     un type de projet.
     """
+
+    CRITICAL_CONFIG_BASENAMES: set[str] = {
+        "pyproject.toml", # Fichier essentiel pour l'utilisateur
+        "requirements.txt",
+        "dockerfile",
+        "docker-compose.yml",
+    }
 
     @property
     @abc.abstractmethod
@@ -108,6 +115,10 @@ class AdminScolaireProfile(AnalysisProfile):
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
         filename_lower = path_components[-1].lower()
 
+        # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques (Réponse à la demande utilisateur)
+        if filename_lower in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
+            return False
+
         if any(path_in_zip.startswith(d) for d in self.IGNORED_DIRECTORIES): return True
         if any(comp in self.IGNORED_PATH_COMPONENTS for comp in path_components): return True
         if path_in_zip in self.BOILERPLATE_FILES: return True
@@ -175,6 +186,10 @@ class ScenarioBuilderProfile(AnalysisProfile):
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
         filename = path_components[-1]
         filename_lower = filename.lower()
+
+        # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques
+        if filename_lower in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
+            return False
 
         if any(comp in self.IGNORED_PATH_COMPONENTS for comp in path_components):
             return True

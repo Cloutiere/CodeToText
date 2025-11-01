@@ -1,8 +1,9 @@
-entrypoint = "main.py"
+entrypoint = "app.py"  # MODIFIÉ ICI
 modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["mailutils", "ruff", "tree"]
 
 [unitTest]
 language = "python3"
@@ -11,5 +12,14 @@ language = "python3"
 requiredFiles = [".replit", "replit.nix"]
 
 [deployment]
-run = ["python3", "main.py"]
+# Si vous prévoyez de déployer, il est bon de mettre à jour ici aussi,
+# bien que pour l'exécution locale, entrypoint soit le plus important.
+run = ["python3", "app.py"] # MODIFIÉ ICI
 deploymentTarget = "cloudrun"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[agent]
+expertMode = true

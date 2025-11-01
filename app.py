@@ -25,7 +25,7 @@ from analysis_profiles import PROFILES, AnalysisProfile
 
 app = Flask(__name__, template_folder='templates', instance_relative_config=True)
 app.secret_key = "supersecretkey"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 DOWNLOAD_FOLDER = os.path.join(app.instance_path, "downloads")
 app.config["DOWNLOAD_FOLDER"] = DOWNLOAD_FOLDER
