@@ -21,5 +21,33 @@ deploymentTarget = "cloudrun"
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 36939
+externalPort = 3000
+
 [agent]
 expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Flask App"
+
+[[workflows.workflow]]
+name = "Flask App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python app.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
