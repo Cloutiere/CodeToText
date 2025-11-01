@@ -1,10 +1,11 @@
 # analysis_profiles.py
-# [Version 1.2]
+# [Version 1.3]
 
 from __future__ import annotations
 
 import abc
 from collections.abc import Iterable
+import os
 
 # ==============================================================================
 # 1. CLASSE DE BASE ABSTRAITE (LE CONTRAT)
@@ -24,6 +25,10 @@ class AnalysisProfile(abc.ABC):
         "requirements.txt",
         "dockerfile",
         "docker-compose.yml",
+        # Ajout de fichiers critiques spécifiques à cette application
+        "app.py", 
+        "analysis_profiles.py",
+        "replit.md",
     }
 
     @property
@@ -117,6 +122,10 @@ class AdminScolaireProfile(AnalysisProfile):
 
         # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques (Réponse à la demande utilisateur)
         if filename_lower in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
+            return False
+
+        # Le fichier app.py (qui contient la logique de base de Flask) est critique pour cette app, mais pas forcément pour d'autres.
+        if path_in_zip in ["app.py", "analysis_profiles.py"]:
             return False
 
         if any(path_in_zip.startswith(d) for d in self.IGNORED_DIRECTORIES): return True
@@ -231,6 +240,87 @@ class ScenarioBuilderProfile(AnalysisProfile):
         content = "\n\n".join(all_app_parts)
         return {"__code_scenario_builder.txt": content}
 
+
+class CodeToTextProfile(AnalysisProfile):
+    """
+    Profil d'analyse pour le projet CodeToText lui-même (l'application Flask).
+    Utile pour générer un rapport sur sa propre architecture.
+    """
+    profile_id: str = "codetotext"
+    profile_name: str = "Projet : CodeToText (Auto-Analyse)"
+
+    IGNORED_PATH_COMPONENTS: set[str] = {
+        ".git", ".github", ".ruff_cache", "__pycache__", "venv",
+        "instance", "node_modules", "dist", "build"
+    }
+    SPECIFIC_FILES_TO_IGNORE: set[str] = {
+        "uv.lock", "generated-icon.png", ".gitignore"
+    }
+
+    def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        filename = path_components[-1]
+        filename_lower = filename.lower()
+
+        # Ne jamais ignorer les fichiers critiques définis pour cette application
+        # (déjà inclus dans CRITICAL_CONFIG_BASENAMES de la classe mère)
+        if filename in ["app.py", "analysis_profiles.py", "replit.md", "pyproject.toml"]:
+             return False
+
+        # Ignorer les dossiers/composants spécifiques
+        if any(comp in self.IGNORED_PATH_COMPONENTS for comp in path_components):
+            # Exception : ne pas ignorer le dossier "templates" même s'il est vide
+            if "templates" in path_components and filename.endswith(".html"):
+                return False
+            return True
+
+        # Fichiers binaires/lock/images non traitables
+        if filename_lower.endswith((".png", ".ico", ".svg")):
+            return True
+
+        # Fichiers spécifiques à ignorer
+        if filename in self.SPECIFIC_FILES_TO_IGNORE:
+            return True
+
+        # Ignorer les fichiers internes de Replit si l'utilisateur les a inclus
+        if filename in [".replit"]:
+            return True # Ils sont gérés génériquement par app.py
+
+        return False
+
+    def categorize_file(self, path_in_zip: str) -> set[str]:
+        _, ext = os.path.splitext(path_in_zip)
+
+        if path_in_zip in ["app.py", "analysis_profiles.py"]:
+            return {"BACKEND_CORE"}
+
+        if path_in_zip.endswith(".py"):
+            return {"BACKEND_UTIL"}
+
+        if path_in_zip.startswith("templates/") and ext == ".html":
+            return {"FRONTEND_JINJA"}
+
+        if path_in_zip in ["pyproject.toml", "uv.lock.txt", "replit.md"]:
+            return {"CONFIG_DOC"}
+
+        return {"OTHER"}
+
+    def generate_consolidated_files(
+        self, categorized_files: list[tuple[str, set[str]]]
+    ) -> dict[str, str]:
+
+        def join_blocks(blocks: Iterable[str]) -> str:
+            return "\n\n".join(blocks)
+
+        backend_parts = [b for b, c in categorized_files if "BACKEND_CORE" in c or "BACKEND_UTIL" in c]
+        frontend_parts = [b for b, c in categorized_files if "FRONTEND_JINJA" in c]
+        config_parts = [b for b, c in categorized_files if "CONFIG_DOC" in c]
+
+        return {
+            "__code_codetotext_backend.txt": join_blocks(backend_parts),
+            "__code_codetotext_frontend.txt": join_blocks(frontend_parts),
+            "__code_codetotext_config.txt": join_blocks(config_parts),
+        }
+
 # ==============================================================================
 # 3. REGISTRE DES PROFILS DISPONIBLES
 # ==============================================================================
@@ -239,5 +329,6 @@ PROFILES: dict[str, AnalysisProfile] = {
     p.profile_id: p for p in [
         AdminScolaireProfile(),
         ScenarioBuilderProfile(),
+        CodeToTextProfile(), # NOUVEAU PROFIL
     ]
 }
