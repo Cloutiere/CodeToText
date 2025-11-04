@@ -1,5 +1,5 @@
 # analysis_profiles.py
-# [Version 1.3]
+# [Version 1.4]
 
 from __future__ import annotations
 
@@ -227,18 +227,96 @@ class ScenarioBuilderProfile(AnalysisProfile):
         return False
 
     def categorize_file(self, path_in_zip: str) -> set[str]:
-        # Pour ce projet, tous les fichiers pertinents sont de la même catégorie.
-        return {"APPLICATION"}
+        categories = {"APPLICATION"}
+
+        # --- Segmentation SCENARIO_SOLO_FLOW ---
+        SOLO_FLOW_EXACT_PATHS: set[str] = {
+            # Backend Routes
+            "backend/app/routes/scenario.py",
+            "backend/app/routes/story_orchestration.py",
+            # Backend Services
+            "backend/app/services/ai_service.py",
+            # Backend Models
+            "backend/app/models/db.py",
+            "backend/app/models/enums.py",
+            "backend/app/models/dtos.py",
+            # Frontend Views/Hooks
+            "frontend/src/views/ScenarioHostView/ScenarioHostView.tsx",
+            "frontend/src/hooks/useScenario.ts",
+        }
+
+        SOLO_FLOW_FRONTEND_PREFIXES: set[str] = {
+            "frontend/src/assets/components/CreationModeSelector/",
+            "frontend/src/assets/components/WorldIntroductionManager/",
+            "frontend/src/assets/components/WorldImageManager/",
+        }
+
+        SOLO_FLOW_SCENARIO_CREATION_COMPONENTS: set[str] = {
+            "PlotBlueprintViewer",
+            "ActGeneratorInterface",
+            "Phase1Summary",
+            "CharacterImageGenerator",
+            "GaleriePersonnages",
+            "DossierPersonnage",
+        }
+
+        SOLO_FLOW_PROFILE_KEYWORDS: set[str] = {
+            "phase1_foundation_guide",
+            "phase2_solo_host_assistant",
+            "plot_architect",
+            "act_generator",
+            "clue_assigner_ai",
+        }
+
+        is_solo_flow = False
+
+        if path_in_zip in SOLO_FLOW_EXACT_PATHS:
+            is_solo_flow = True
+
+        # Frontend Composants de Progression (Par préfixe de dossier)
+        elif any(path_in_zip.startswith(prefix) for prefix in SOLO_FLOW_FRONTEND_PREFIXES):
+            is_solo_flow = True
+
+        # Frontend Composants de Progression (Par nom dans ScenarioCreation)
+        elif path_in_zip.startswith("frontend/src/assets/components/ScenarioCreation/"):
+            filename_base = os.path.splitext(os.path.basename(path_in_zip))[0]
+            # On vérifie uniquement le nom de base car on veut inclure le .tsx, .ts, et les .module.css associés
+            if filename_base in SOLO_FLOW_SCENARIO_CREATION_COMPONENTS:
+                is_solo_flow = True
+
+        # Configuration LLM (Progression Solo)
+        elif path_in_zip.startswith("backend/seed_data/profiles/"):
+            for keyword in SOLO_FLOW_PROFILE_KEYWORDS:
+                if keyword in path_in_zip:
+                    is_solo_flow = True
+                    break
+
+        if is_solo_flow:
+            categories.add("SCENARIO_SOLO_FLOW")
+
+        return categories
 
     def generate_consolidated_files(
         self, categorized_files: list[tuple[str, set[str]]]
     ) -> dict[str, str]:
-        # Un seul fichier consolidé est suffisant pour ce projet.
+        def join_blocks(blocks: Iterable[str]) -> str:
+            return "\n\n".join(blocks)
+
         all_app_parts = [
             block for block, categories in categorized_files if "APPLICATION" in categories
         ]
-        content = "\n\n".join(all_app_parts)
-        return {"__code_scenario_builder.txt": content}
+        solo_flow_parts = [
+            block for block, categories in categorized_files if "SCENARIO_SOLO_FLOW" in categories
+        ]
+
+        # Conserver le fichier général
+        output_files = {"__code_scenario_builder.txt": join_blocks(all_app_parts)}
+
+        # Ajouter le nouveau fichier de segmentation
+        if solo_flow_parts:
+            output_files["__code_scenario_solo_flow.txt"] = join_blocks(solo_flow_parts)
+
+        return output_files
 
 
 class CodeToTextProfile(AnalysisProfile):
@@ -329,6 +407,6 @@ PROFILES: dict[str, AnalysisProfile] = {
     p.profile_id: p for p in [
         AdminScolaireProfile(),
         ScenarioBuilderProfile(),
-        CodeToTextProfile(), # NOUVEAU PROFIL
+        CodeToTextProfile(),
     ]
 }
