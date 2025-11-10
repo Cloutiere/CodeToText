@@ -1,5 +1,5 @@
 # analysis_profiles.py
-# [Version 1.5]
+# [Version 2.0]
 
 from __future__ import annotations
 
@@ -44,6 +44,22 @@ class AnalysisProfile(abc.ABC):
         "run.py", # Point d'entrée Flask pour ce projet
         "analysis_profiles.py", # Ce fichier lui-même, utile pour l'auto-analyse
     }
+
+    @staticmethod
+    def is_always_included(path_in_zip: str, path_components: list[str]) -> bool:
+        """
+        Vérifie si le fichier doit être inclus de manière inconditionnelle,
+        indépendamment du profil.
+
+        Règle: Les fichiers d'architecture (DDA_V*.md, MEMO_TECH_V*.md) sont toujours inclus.
+        """
+        filename = path_components[-1]
+
+        # Check for DDA_V or MEMO_TECH_V prefix (case-insensitive check on the filename)
+        if filename.upper().startswith("MEMO_TECH_V") or filename.upper().startswith("DDA_V"):
+            return True
+
+        return False
 
     @property
     @abc.abstractmethod
@@ -136,6 +152,10 @@ class AdminScolaireProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
+        if AnalysisProfile.is_always_included(path_in_zip, path_components):
+            return False
+
         filename_lower = path_components[-1].lower()
 
         # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques
@@ -282,7 +302,7 @@ class ScenarioBuilderProfile(AnalysisProfile):
         "instance", "attached_assets", "node_modules", "dist", "build", "tests"
     }
     SPECIFIC_FILES_TO_IGNORE: set[str] = {
-        "poetry.lock", "database.db", "lint.md", "replit.md", ".gitignore", # replit.md is critical for mermaid, so it should not be ignored for MermaidProfile.
+        "poetry.lock", "database.db", "lint.md", "replit.md", ".gitignore",
         "package-lock.json"
     }
     MIGRATIONS_BOILERPLATE: set[str] = {
@@ -290,6 +310,10 @@ class ScenarioBuilderProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
+        if AnalysisProfile.is_always_included(path_in_zip, path_components):
+            return False
+
         filename = path_components[-1]
         filename_lower = filename.lower()
 
@@ -304,8 +328,21 @@ class ScenarioBuilderProfile(AnalysisProfile):
         if filename_lower.endswith(".lock"): return True
         if filename_lower.endswith(".db"): return True
         if filename_lower.endswith(".sql"): return True
-        if filename_lower.endswith(".json") and filename_lower != "package.json": # Autoriser package.json
-            return True
+
+        # Gestion spécifique des fichiers JSON
+        if filename_lower.endswith(".json"):
+            # Exception 1: package.json est autorisé
+            if filename_lower == "package.json":
+                return False
+
+            # Exception 2: Fichiers de configuration AI sous seed_data/models ou seed_data/profiles sont autorisés
+            if (path_in_zip.startswith("backend/seed_data/models/") or 
+                path_in_zip.startswith("backend/seed_data/profiles/")):
+                return False # Inclus
+
+            # Règle générale: Ignorer les autres JSON
+            return True 
+
         if filename_lower in self.SPECIFIC_FILES_TO_IGNORE: return True
 
         # Ignorer les dossiers spécifiques
@@ -325,6 +362,13 @@ class ScenarioBuilderProfile(AnalysisProfile):
         categories = set()
         if path_in_zip in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
             categories.add("CONFIG_DOC")
+
+        # NEW: AI Configuration files
+        if path_in_zip.endswith(".json") and (
+            path_in_zip.startswith("backend/seed_data/models/") or 
+            path_in_zip.startswith("backend/seed_data/profiles/")
+        ):
+            categories.add("AI_CONFIG")
 
         # --- Segmentation SCENARIO_SOLO_FLOW ---
         SOLO_FLOW_EXACT_PATHS: set[str] = {
@@ -418,6 +462,8 @@ class ScenarioBuilderProfile(AnalysisProfile):
         fin_sportif_parts = [b for b, c in categorized_files if "FIN_SPORTIF" in c]
 
         config_doc_parts = [b for b, c in categorized_files if "CONFIG_DOC" in c]
+        ai_config_parts = [b for b, c in categorized_files if "AI_CONFIG" in c] # NEW
+
         backend_core_parts = [b for b, c in categorized_files if "BACKEND_CORE" in c]
         backend_config_parts = [b for b, c in categorized_files if "BACKEND_CONFIG" in c]
         backend_migrations_parts = [b for b, c in categorized_files if "BACKEND_MIGRATIONS" in c]
@@ -435,9 +481,9 @@ class ScenarioBuilderProfile(AnalysisProfile):
         output_files["__code_scenario_builder_fin_global.txt"] = join_blocks(fin_global_parts)
         output_files["__code_scenario_builder_fin_sportif.txt"] = join_blocks(fin_sportif_parts)
 
-        # Consolider les fichiers critiques et de configuration
+        # Consolider les fichiers critiques, AI_CONFIG et autres configurations
         output_files["__code_scenario_builder_config_docs.txt"] = join_blocks(
-            config_doc_parts + backend_core_parts + backend_config_parts +
+            config_doc_parts + ai_config_parts + backend_core_parts + backend_config_parts +
             backend_util_parts + frontend_code_parts + frontend_static_parts +
             frontend_config_parts
         )
@@ -466,6 +512,10 @@ class CodeToTextProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
+        if AnalysisProfile.is_always_included(path_in_zip, path_components):
+            return False
+
         filename = path_components[-1]
         filename_lower = filename.lower()
 
@@ -539,7 +589,7 @@ class MermaidProfile(AnalysisProfile):
     # Dossiers ou composants à ignorer complètement
     IGNORED_DIRS_OR_COMPONENTS: set[str] = {
         ".git", ".github", ".ruff_cache", "__pycache__", "venv",
-        "node_modules", "dist", "build", "tests", "instance", "attached_assets",
+        "node_modules", "dist", "build", "instance", "attached_assets", # RETRAIT de "tests"
         "migrations/versions" # Ignore the actual generated migration files content for this profile
     }
     # Fichiers spécifiques à ignorer, indépendamment de leur dossier
@@ -556,7 +606,14 @@ class MermaidProfile(AnalysisProfile):
     CRITICAL_CONFIG_FILES: set[str] = {
         # Root level critical configs and docs
         ".env.example", # Keep this as a critical config template
-        "AMELIORATIONS_COMPLETEES.md", "CONFIGURATION_COMPLETE.md", "DDA_mermaid_1762371637525.md",
+        "AMELIORATIONS_COMPLETEES.md", 
+        "CONFIGURATION_COMPLETE.md", 
+        "SPECIFICATION_FONCTIONNELLE_V4.0.md",
+        "MEMO_TECH_4.0.md",# Fichier spécifique d'architecture
+        "MEMO_TECH_1.0.md", 
+        "DDA_V4.0.md", # Correction: Ajout du fichier générique DDA
+        "DDA_V1.0.md", 
+        "PLAN_DEVELOPPEMENT_FRONTEND.md", # Correction: Ajout du plan de développement
         "README.md", "STRUCTURE.md", "replit.md", ".replit",
         # Backend critical configs/entry points
         "backend/run.py",
@@ -581,6 +638,10 @@ class MermaidProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
+        if AnalysisProfile.is_always_included(path_in_zip, path_components):
+            return False
+
         filename = path_components[-1]
         filename_lower = filename.lower()
 
@@ -603,8 +664,15 @@ class MermaidProfile(AnalysisProfile):
                 return False
             return True # If any component matches an ignored dir, ignore the file.
 
-        # 4. Ignore specific MD files that are not critical docs.
-        if filename_lower.endswith(".md") and path_in_zip not in ["README.md", "STRUCTURE.md", "AMELIORATIONS_COMPLETEES.md", "CONFIGURATION_COMPLETE.md", "DDA_mermaid_1762371637525.md", "replit.md"]:
+        # 4. Handle files inside the 'tests' directory explicitly if not in IGNORED_DIRS_OR_COMPONENTS
+        # Since 'tests' is removed from IGNORED_DIRS_OR_COMPONENTS, we ensure they are NOT ignored
+        if "tests" in path_components:
+            return False
+
+        # 5. Ignore specific MD files that are not critical docs.
+        # Rule 1 ensures critical MD files are kept (return False). Any MD file
+        # reaching this point is non-critical and should be ignored.
+        if filename_lower.endswith(".md"):
             return True
 
         return False
@@ -619,7 +687,9 @@ class MermaidProfile(AnalysisProfile):
         # --- Backend Categories ---
         if path_in_zip.startswith("backend/"):
             if path_in_zip.endswith(".py"):
-                if "routes" in path_in_zip:
+                if path_in_zip.startswith("backend/tests/"):
+                    categories.add("TESTS")
+                elif "routes" in path_in_zip:
                     if "mermaid.py" in path_in_zip: categories.add("BACKEND_CODE_CRITICAL")
                     elif "nodes.py" in path_in_zip or "subprojects.py" in path_in_zip:
                          categories.add("BACKEND_CODE_CRITICAL") # Also critical for Mermaid logic
@@ -637,8 +707,6 @@ class MermaidProfile(AnalysisProfile):
                     categories.add("BACKEND_CORE")
                 elif path_in_zip.startswith("backend/migrations/"): # Specific handling for migration scripts
                     categories.add("BACKEND_MIGRATIONS")
-                elif path_in_zip.startswith("backend/tests/"):
-                    categories.add("TESTS")
                 else: # Catch all other backend python files
                     categories.add("BACKEND_UTIL") 
             elif path_in_zip == "backend/requirements.txt":
@@ -680,10 +748,17 @@ class MermaidProfile(AnalysisProfile):
 
         backend_core_parts = [b for b, c in categorized_files if "BACKEND_CORE" in c]
         backend_config_parts = [b for b, c in categorized_files if "BACKEND_CONFIG" in c]
-        backend_routes_critical_parts = [b for b, c in categorized_files if "BACKEND_ROUTES_CRITICAL" in c]
+        backend_code_critical_parts = [b for b, c in categorized_files if "BACKEND_CODE_CRITICAL" in c]
         backend_services_critical_parts = [b for b, c in categorized_files if "BACKEND_SERVICES_CRITICAL" in c]
-        backend_code_parts = [b for b, c in categorized_files if "BACKEND_CODE" in c and not ("BACKEND_CORE" in c or "BACKEND_CONFIG" in c or "BACKEND_MIGRATIONS" in c or "BACKEND_ROUTES_CRITICAL" in c or "BACKEND_SERVICES_CRITICAL" in c)]
-        backend_migrations_parts = [b for b, c in categorized_files if "BACKEND_MIGRATIONS" in c]
+
+        # Correction de la ligne tronquée (Ligne 731 dans la version précédente)
+        backend_code_parts = [
+            b for b, c in categorized_files 
+            if "BACKEND_CODE" in c and not (
+                "BACKEND_CORE" in c or "BACKEND_CONFIG" in c or "BACKEND_MIGRATIONS" in c or 
+                "BACKEND_CODE_CRITICAL" in c or "BACKEND_SERVICES_CRITICAL" in c
+            )
+        ]
 
         frontend_code_parts = [b for b, c in categorized_files if "FRONTEND_CODE" in c]
         frontend_static_parts = [b for b, c in categorized_files if "FRONTEND_STATIC" in c]
@@ -696,17 +771,38 @@ class MermaidProfile(AnalysisProfile):
 
         output_files = {}
 
-        # Backend Consolidation: Combine core, config, critical routes/services, and general code
-        # Ensure critical pieces are clearly identifiable.
+        # 1. Consolidation SANS TESTS
+        all_parts_no_tests = (
+            config_doc_parts + 
+            backend_core_parts + 
+            backend_config_parts + 
+            backend_code_critical_parts + 
+            backend_services_critical_parts + 
+            backend_code_parts + 
+            frontend_code_parts + 
+            frontend_types_parts + 
+            frontend_config_parts + 
+            frontend_static_parts +
+            other_parts # Inclure 'OTHER' car il peut contenir des fichiers non classifiés mais importants
+        )
+        output_files["__code_mermaid_complet_sans_tests.txt"] = join_blocks(all_parts_no_tests)
+
+        # 2. Consolidation AVEC TESTS
+        all_parts = all_parts_no_tests + tests_parts
+        output_files["__code_mermaid_complet.txt"] = join_blocks(all_parts)
+
+        # 3. Consolidation thématique spécifique (gardée pour l'analyse granulée)
+
+        # Backend Consolidation: Combine core, config (key files), critical routes/services, and general code
         output_files["__code_mermaid_backend.txt"] = join_blocks(
             backend_core_parts + 
             [b for b in backend_config_parts if "requirements.txt" in b or ".replit" in b] + # Include only key config files here
-            backend_routes_critical_parts + 
+            backend_code_critical_parts + 
             backend_services_critical_parts + 
             backend_code_parts
         )
 
-        # Frontend Consolidation: Combine code, types, config, and static assets
+        # Frontend Consolidation: Combine code, types, config (key files), and static assets
         output_files["__code_mermaid_frontend.txt"] = join_blocks(
             frontend_code_parts + 
             frontend_types_parts +
@@ -715,13 +811,18 @@ class MermaidProfile(AnalysisProfile):
         )
 
         # Config and Docs: Critical docs, root readme, structure, dda, etc.
+        # Collect remaining backend configs (e.g. alembic.ini)
+        remaining_backend_configs = [b for b in backend_config_parts if "requirements.txt" not in b and ".replit" not in b]
+        # Collect remaining frontend configs (e.g. non-critical tsconfig components)
+        remaining_frontend_configs = [b for b in frontend_config_parts if "package.json" not in b and "vite.config.ts" not in b and "tailwind.config.js" not in b and "tsconfig" not in b and "postcss.config.js" not in b]
+
         output_files["__code_mermaid_config_docs.txt"] = join_blocks(
             config_doc_parts + 
-            [b for b in backend_config_parts if "requirements.txt" not in b and ".replit" not in b and "alembic.ini" not in b] + # Other backend configs
-            [b for b in frontend_config_parts if "package.json" not in b and "vite.config.ts" not in b and "tailwind.config.js" not in b and "tsconfig" not in b and "postcss.config.js" not in b] # Other frontend configs
+            remaining_backend_configs + 
+            remaining_frontend_configs
         )
 
-        # Include tests and others if they exist
+        # Include tests and others in dedicated files if they exist (in addition to the comprehensive files)
         if tests_parts:
             output_files["__code_mermaid_tests.txt"] = join_blocks(tests_parts)
         if other_parts:
@@ -748,6 +849,10 @@ class CompleteProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
+        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
+        if AnalysisProfile.is_always_included(path_in_zip, path_components):
+            return False
+
         filename_lower = path_components[-1].lower()
 
         # 1. Never ignore critical config/doc files.
@@ -795,10 +900,6 @@ class CompleteProfile(AnalysisProfile):
 # 3. REGISTRE DES PROFILIS DISPONIBLES
 # ==============================================================================
 
-# Note: Le traceback NameError pour CodeToTextProfile était probablement dû à une version
-# antérieure ou à un problème d'exécution/copie. L'ordre des définitions dans ce fichier
-# est correct et CodeToTextProfile est défini avant d'être utilisé dans PROFILES.
-# Ce fichier inclut maintenant le nouveau MermaidProfile.
 PROFILES: dict[str, AnalysisProfile] = {
     p.profile_id: p for p in [
         AdminScolaireProfile(),
