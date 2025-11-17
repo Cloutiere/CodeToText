@@ -1,5 +1,5 @@
 # [app.py]
-# [Version 8.0]
+# [Version 8.1]
 
 from __future__ import annotations
 
@@ -157,7 +157,9 @@ def _process_zip_file(
             path_for_display = path_for_filtering
 
             new_filename_base = path_for_display.replace('/', '.') if basename_counts[filename_basename] > 1 else filename_basename
-            extensions_to_keep = {".tsx", ".css", ".html", ".js", ".json"}
+
+            # AC-3: Ajout de ".py" à la liste des extensions à conserver même en mode textifié.
+            extensions_to_keep = {".tsx", ".css", ".html", ".js", ".json", ".py"}
             _, ext = os.path.splitext(filename_basename_lower)
 
             if keep_original_extension or ext in extensions_to_keep or filename_basename_lower in ["package.json"]:

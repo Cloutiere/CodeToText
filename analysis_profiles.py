@@ -1,5 +1,5 @@
 # analysis_profiles.py
-# [Version 2.0]
+# [Version 2.1]
 
 from __future__ import annotations
 
@@ -539,9 +539,11 @@ class CodeToTextProfile(AnalysisProfile):
         if filename in self.SPECIFIC_FILES_TO_IGNORE:
             return True
 
-        # Ignorer les fichiers internes de Replit si l'utilisateur les a inclus
-        if filename in [".replit"]:
-            return True # Ils sont gérés génériquement par app.py
+        # # Ignorer les fichiers internes de Replit si l'utilisateur les a inclus
+        # if filename in [".replit"]:
+        #     return True # Ils sont gérés génériquement par app.py
+        # Règle AC-2 : Suppression de l'exclusion de .replit pour s'assurer qu'il est inclus
+        # via AnalysisProfile.CRITICAL_CONFIG_BASENAMES.
 
         return False
 
@@ -839,9 +841,10 @@ class CompleteProfile(AnalysisProfile):
     profile_name: str = "Profil Complet (Tous les Fichiers)"
 
     # IGNORER les dossiers de développement, caches, binaires, lock files, et certains formats d'image
+    # AC-1: Retrait de "tests" et ".github" de la liste d'ignorance.
     IGNORED_DIRS_OR_COMPONENTS: set[str] = {
-        ".git", ".github", ".ruff_cache", "__pycache__", "venv",
-        "node_modules", "dist", "build", "tests", "instance", "attached_assets"
+        ".git", ".ruff_cache", "__pycache__", "venv",
+        "node_modules", "dist", "build", "instance", "attached_assets"
     }
     SPECIFIC_FILES_TO_IGNORE: set[str] = {
         "package-lock.json", "*.lock", "*.db", "*.sql", "*.log",
