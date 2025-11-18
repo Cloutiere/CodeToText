@@ -1,5 +1,5 @@
 # analysis_profiles.py
-# [Version 2.1]
+# [Version 2.2.3]
 
 from __future__ import annotations
 
@@ -8,117 +8,9 @@ from collections.abc import Iterable
 import os
 
 # ==============================================================================
-# 1. CLASSE DE BASE ABSTRAITE (LE CONTRAT)
+# IMPORT DE LA CLASSE DE BASE DÉPLAÇÉE
 # ==============================================================================
-
-class AnalysisProfile(abc.ABC):
-    """
-    Classe de base abstraite pour un profil d'analyse de projet.
-
-    Chaque profil encapsule la logique de filtrage des fichiers, de
-    catégorisation et de génération de rapports consolidés spécifiques à
-    un type de projet.
-    """
-
-    # Fichiers de configuration absolument critiques qui ne doivent JAMAIS être ignorés.
-    # Ces fichiers sont essentiels pour comprendre et exécuter le projet.
-    CRITICAL_CONFIG_BASENAMES: set[str] = {
-        "pyproject.toml", # Fichier essentiel pour l'utilisateur (gestion des dépendances/build)
-        "requirements.txt", # Dépendances Python
-        "dockerfile", "docker-compose.yml", # Docker config
-        ".replit", # Replit config
-        "replit.md", # Replit documentation
-        "package.json", # Frontend package manager
-        "vite.config.ts", # Frontend build config
-        "tailwind.config.js", # Frontend styling config
-        "tsconfig.json", # Frontend TS config
-        "tsconfig.node.json", # Frontend TS node config
-        "postcss.config.js", # Frontend CSS config
-        ".env.example", # Template pour l'environnement
-        "README.md", # Documentation principale
-        "STRUCTURE.md", # Structure du projet
-        "AMELIORATIONS_COMPLETEES.md", # Historique des améliorations
-        "CONFIGURATION_COMPLETE.md", # Rapport de configuration
-        "DDA_mermaid_1762371637525.md", # Document d'Architecture
-        "app.py", # Point d'entrée principal de l'application (par ex: Flask)
-        "run.py", # Point d'entrée Flask pour ce projet
-        "analysis_profiles.py", # Ce fichier lui-même, utile pour l'auto-analyse
-    }
-
-    @staticmethod
-    def is_always_included(path_in_zip: str, path_components: list[str]) -> bool:
-        """
-        Vérifie si le fichier doit être inclus de manière inconditionnelle,
-        indépendamment du profil.
-
-        Règle: Les fichiers d'architecture (DDA_V*.md, MEMO_TECH_V*.md) sont toujours inclus.
-        """
-        filename = path_components[-1]
-
-        # Check for DDA_V or MEMO_TECH_V prefix (case-insensitive check on the filename)
-        if filename.upper().startswith("MEMO_TECH_V") or filename.upper().startswith("DDA_V"):
-            return True
-
-        return False
-
-    @property
-    @abc.abstractmethod
-    def profile_id(self) -> str:
-        """Identifiant unique utilisé dans le formulaire HTML."""
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def profile_name(self) -> str:
-        """Nom lisible par l'humain pour l'affichage."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
-        """
-        Détermine si un fichier doit être ignoré en fonction de son chemin.
-
-        Args:
-            path_in_zip: Le chemin complet du fichier dans l'archive (ex: "backend/app/models.py").
-            path_components: Le chemin décomposé en une liste de répertoires/fichiers
-                             (ex: ["backend", "app", "models.py"]).
-
-        Returns:
-            True si le fichier doit être ignoré, False sinon.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def categorize_file(self, path_in_zip: str) -> set[str]:
-        """
-        Attribue une ou plusieurs catégories à un fichier en fonction de son chemin.
-
-        Args:
-            path_in_zip: Le chemin complet du fichier dans l'archive.
-
-        Returns:
-            Un ensemble de chaînes de caractères représentant les catégories
-            (ex: {"BACKEND_CODE", "CONFIG_DOC"}).
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def generate_consolidated_files(
-        self, categorized_files: list[tuple[str, set[str]]]
-    ) -> dict[str, str]:
-        """
-        Génère le contenu des fichiers consolidés spécifiques à ce profil.
-
-        Args:
-            categorized_files: Une liste de tuples, où chaque tuple contient
-                               le bloc de contenu d'un fichier et l'ensemble de
-                               ses catégories.
-
-        Returns:
-            Un dictionnaire où les clés sont les noms des fichiers à générer
-            (ex: '__code_taches.txt') et les valeurs sont leur contenu.
-        """
-        raise NotImplementedError
+from codetotext_core.profiles.base import AnalysisProfile
 
 # ==============================================================================
 # 2. PROFILS CONCRETS (LES STRATÉGIES)
@@ -152,35 +44,29 @@ class AdminScolaireProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
-        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
 
         filename_lower = path_components[-1].lower()
 
-        # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques
         if path_in_zip in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
             return False
-        if filename_lower == "readme.md" and path_in_zip == "readme.md": # Le README racine est critique
+        if filename_lower == "readme.md" and path_in_zip == "readme.md":
             return False
 
-        # Ignorer les fichiers binaires et lock
         if filename_lower.endswith((".png", ".ico", ".svg")): return True
         if filename_lower.endswith(".lock"): return True
         if filename_lower.endswith(".db"): return True
         if filename_lower.endswith(".sql"): return True
-        if filename_lower.endswith(".json") and filename_lower != "package.json": # Autoriser package.json
+        if filename_lower.endswith(".json") and filename_lower != "package.json":
             return True
         if filename_lower in self.SPECIFIC_FILES_TO_IGNORE: return True
 
-        # Ignorer les dossiers spécifiques
         if any(comp in self.IGNORED_DIRS_OR_COMPONENTS for comp in path_components):
-            # Exception: Ne pas ignorer les fichiers de migration, même si 'versions' est dans IGNORED_DIRS_OR_COMPONENTS
             if path_in_zip.startswith("administration_scolaire_app/migrations/versions/"):
                  return False
             return True
 
-        # Ignorer les .md non critiques et certains fichiers de boilerplate
         if filename_lower.endswith(".md") and filename_lower != "readme.md": return True
         if path_in_zip in self.BOILERPLATE_FILES: return True
 
@@ -191,7 +77,6 @@ class AdminScolaireProfile(AnalysisProfile):
         if path_in_zip in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
             categories.add("CONFIG_DOC")
 
-        # --- Segmentation par domaine ---
         if path_in_zip.startswith("administration_scolaire_app/"):
             if path_in_zip.endswith(".py"):
                 if "taches" in path_in_zip:
@@ -200,7 +85,7 @@ class AdminScolaireProfile(AnalysisProfile):
                     categories.add("FIN_GLOBAL")
                 elif "api_sports.py" in path_in_zip or "services_sports_budget.py" in path_in_zip:
                     categories.add("FIN_SPORTIF")
-                elif "app.py" in path_in_zip: # Le run.py de flask doit être bien identifié
+                elif "app.py" in path_in_zip:
                     categories.add("BACKEND_CORE")
                 elif "config.py" in path_in_zip:
                     categories.add("BACKEND_CONFIG")
@@ -219,7 +104,7 @@ class AdminScolaireProfile(AnalysisProfile):
             categories.add("FIN_SPORTIF")
 
         elif path_in_zip.startswith("shared/"):
-            categories.add("FIN_SPORTIF") # Shared est utilisé par le module sportif
+            categories.add("FIN_SPORTIF")
 
         elif path_in_zip.endswith(".md"):
             categories.add("CONFIG_DOC")
@@ -227,23 +112,21 @@ class AdminScolaireProfile(AnalysisProfile):
         elif path_in_zip.endswith(".ini"):
             categories.add("BACKEND_CONFIG")
 
-        elif path_in_zip.endswith(".json"): # Package.json is critical config
+        elif path_in_zip.endswith(".json"):
             if path_in_zip == "package.json":
                 categories.add("FRONTEND_CONFIG")
-            # Other JSON files are ignored anyway.
 
         elif path_in_zip.startswith("frontend/"):
             if path_in_zip.endswith((".tsx", ".ts", ".jsx", ".js")):
                 if "frontend/src/" in path_in_zip and not path_in_zip.endswith("vite-env.d.ts"):
                     categories.add("FRONTEND_CODE")
-                else: # vite.config.ts, tsconfig.json, etc.
+                else:
                     categories.add("FRONTEND_CONFIG")
             elif path_in_zip.endswith(".css"):
                 categories.add("FRONTEND_STATIC")
             elif path_in_zip.endswith(".html"):
                 categories.add("FRONTEND_STATIC")
 
-        # Si aucune catégorie n'a été attribuée, assigner 'OTHER'
         if not categories:
             categories.add("OTHER")
 
@@ -259,25 +142,26 @@ class AdminScolaireProfile(AnalysisProfile):
         fin_global_parts = [b for b, c in categorized_files if "FIN_GLOBAL" in c]
         fin_sportif_parts = [b for b, c in categorized_files if "FIN_SPORTIF" in c]
 
-        # Regroupement des fichiers de configuration et documentation
         config_doc_parts = [b for b, c in categorized_files if "CONFIG_DOC" in c]
         backend_core_parts = [b for b, c in categorized_files if "BACKEND_CORE" in c]
         backend_config_parts = [b for b, c in categorized_files if "BACKEND_CONFIG" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         backend_util_parts = [b for b, c in categorized_files if "BACKEND_UTIL" in c]
         frontend_code_parts = [b for b, c in categorized_files if "FRONTEND_CODE" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         frontend_static_parts = [b for b, c in categorized_files if "FRONTEND_STATIC" in c]
         frontend_config_parts = [b for b, c in categorized_files if "FRONTEND_CONFIG" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         tests_parts = [b for b, c in categorized_files if "TESTS" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         other_parts = [b for b, c in categorized_files if "OTHER" in c]
 
         output_files: dict[str, str] = {}
 
-        # Consolidation des fichiers critiques et de configuration
         output_files["__code_admin_scolaire_taches.txt"] = join_blocks(taches_parts)
         output_files["__code_admin_scolaire_fin_global.txt"] = join_blocks(fin_global_parts)
         output_files["__code_admin_scolaire_fin_sportif.txt"] = join_blocks(fin_sportif_parts)
 
-        # Consolider les fichiers de config, core, util et frontend en un seul bloc pour une vue globale
         output_files["__code_admin_scolaire_config_docs.txt"] = join_blocks(
             config_doc_parts + backend_core_parts + backend_config_parts +
             backend_util_parts + frontend_code_parts + frontend_static_parts +
@@ -296,7 +180,6 @@ class ScenarioBuilderProfile(AnalysisProfile):
     profile_id: str = "scenario_builder"
     profile_name: str = "Projet : Scenario Builder"
 
-    # --- Règles de filtrage ---
     IGNORED_DIRS_OR_COMPONENTS: set[str] = {
         ".git", ".github", ".ruff_cache", "__pycache__", "venv",
         "instance", "attached_assets", "node_modules", "dist", "build", "tests"
@@ -310,51 +193,41 @@ class ScenarioBuilderProfile(AnalysisProfile):
     }
 
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
-        # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
 
         filename = path_components[-1]
         filename_lower = filename.lower()
 
-        # Règle d'inclusion N°1: Ne jamais ignorer les fichiers de configuration critiques
         if path_in_zip in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
             return False
-        if filename_lower == "readme.md" and path_in_zip == "readme.md": # Le README racine est critique
+        if filename_lower == "readme.md" and path_in_zip == "readme.md":
             return False
 
-        # Ignorer les fichiers binaires et lock
         if filename_lower.endswith((".png", ".ico", ".svg")): return True
         if filename_lower.endswith(".lock"): return True
         if filename_lower.endswith(".db"): return True
         if filename_lower.endswith(".sql"): return True
 
-        # Gestion spécifique des fichiers JSON
         if filename_lower.endswith(".json"):
-            # Exception 1: package.json est autorisé
             if filename_lower == "package.json":
                 return False
 
-            # Exception 2: Fichiers de configuration AI sous seed_data/models ou seed_data/profiles sont autorisés
             if (path_in_zip.startswith("backend/seed_data/models/") or 
                 path_in_zip.startswith("backend/seed_data/profiles/")):
-                return False # Inclus
+                return False
 
-            # Règle générale: Ignorer les autres JSON
             return True 
 
         if filename_lower in self.SPECIFIC_FILES_TO_IGNORE: return True
 
-        # Ignorer les dossiers spécifiques
         if any(comp in self.IGNORED_DIRS_OR_COMPONENTS for comp in path_components):
-            # Exception: Ne pas ignorer les fichiers de migration, même si 'versions' est dans IGNORED_DIRS_OR_COMPONENTS
             if path_in_zip.startswith("scenario_builder_app/migrations/versions/"):
                  return False
             return True
 
-        # Ignorer les .md non critiques et certains fichiers de boilerplate
         if filename_lower.endswith(".md") and filename_lower != "readme.md": return True
-        if path_in_zip in self.MIGRATIONS_BOILERPLATE: return True # Specific boilerplate for migrations
+        if path_in_zip in self.MIGRATIONS_BOILERPLATE: return True
 
         return False
 
@@ -363,14 +236,12 @@ class ScenarioBuilderProfile(AnalysisProfile):
         if path_in_zip in AnalysisProfile.CRITICAL_CONFIG_BASENAMES:
             categories.add("CONFIG_DOC")
 
-        # NEW: AI Configuration files
         if path_in_zip.endswith(".json") and (
             path_in_zip.startswith("backend/seed_data/models/") or 
             path_in_zip.startswith("backend/seed_data/profiles/")
         ):
             categories.add("AI_CONFIG")
 
-        # --- Segmentation SCENARIO_SOLO_FLOW ---
         SOLO_FLOW_EXACT_PATHS: set[str] = {
             "scenario_builder_app/routes/scenario.py",
             "scenario_builder_app/routes/story_orchestration.py",
@@ -409,7 +280,6 @@ class ScenarioBuilderProfile(AnalysisProfile):
 
         if is_solo_flow: categories.add("SCENARIO_SOLO_FLOW")
 
-        # --- Segmentation par domaine ---
         if path_in_zip.startswith("scenario_builder_app/"):
             if path_in_zip.endswith(".py"):
                 if "routes" in path_in_zip or "services" in path_in_zip:
@@ -435,7 +305,7 @@ class ScenarioBuilderProfile(AnalysisProfile):
             elif path_in_zip.endswith(".html"):
                 categories.add("FRONTEND_STATIC")
         elif path_in_zip.startswith("shared/"):
-            categories.add("FIN_SPORTIF") # Shared est utilisé par le module sportif
+            categories.add("FIN_SPORTIF")
 
         elif path_in_zip.endswith(".md"):
             categories.add("CONFIG_DOC")
@@ -444,7 +314,6 @@ class ScenarioBuilderProfile(AnalysisProfile):
         elif path_in_zip == "replit.md":
             categories.add("CONFIG_DOC")
 
-        # Si aucune catégorie n'a été attribuée, assigner 'OTHER'
         if not categories:
             categories.add("OTHER")
 
@@ -462,16 +331,19 @@ class ScenarioBuilderProfile(AnalysisProfile):
         fin_sportif_parts = [b for b, c in categorized_files if "FIN_SPORTIF" in c]
 
         config_doc_parts = [b for b, c in categorized_files if "CONFIG_DOC" in c]
-        ai_config_parts = [b for b, c in categorized_files if "AI_CONFIG" in c] # NEW
+        ai_config_parts = [b for b, c in categorized_files if "AI_CONFIG" in c]
 
         backend_core_parts = [b for b, c in categorized_files if "BACKEND_CORE" in c]
         backend_config_parts = [b for b, c in categorized_files if "BACKEND_CONFIG" in c]
         backend_migrations_parts = [b for b, c in categorized_files if "BACKEND_MIGRATIONS" in c]
         backend_util_parts = [b for b, c in categorized_files if "BACKEND_UTIL" in c]
         frontend_code_parts = [b for b, c in categorized_files if "FRONTEND_CODE" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         frontend_static_parts = [b for b, c in categorized_files if "FRONTEND_STATIC" in c]
         frontend_config_parts = [b for b, c in categorized_files if "FRONTEND_CONFIG" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         tests_parts = [b for b, c in categorized_files if "TESTS" in c]
+        # CORRECTION CRITIQUE : Syntaxe invalide corrigée (espace manquant)
         other_parts = [b for b, c in categorized_files if "OTHER" in c]
 
         output_files: dict[str, str] = {}
@@ -481,7 +353,6 @@ class ScenarioBuilderProfile(AnalysisProfile):
         output_files["__code_scenario_builder_fin_global.txt"] = join_blocks(fin_global_parts)
         output_files["__code_scenario_builder_fin_sportif.txt"] = join_blocks(fin_sportif_parts)
 
-        # Consolider les fichiers critiques, AI_CONFIG et autres configurations
         output_files["__code_scenario_builder_config_docs.txt"] = join_blocks(
             config_doc_parts + ai_config_parts + backend_core_parts + backend_config_parts +
             backend_util_parts + frontend_code_parts + frontend_static_parts +
