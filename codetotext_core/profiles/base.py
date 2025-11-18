@@ -1,5 +1,5 @@
 # codetotext_core/profiles/base.py
-# [Version 2.1]
+# [Version 2.2]
 
 from __future__ import annotations
 
@@ -42,9 +42,36 @@ class AnalysisProfile(abc.ABC):
         "analysis_profiles.py", # Ce fichier lui-même, utile pour l'auto-analyse
     }
 
-    # EXTENSIONS CRITIQUES A IGNORER SYSTEMATIQUEMENT (ex: binaires, dumps de DB)
+    # EXTENSIONS CRITIQUES A IGNORER SYSTEMATIQUEMENT
+    # Inclut les binaires, bases de données, images, polices, archives, etc.
     CRITICAL_IGNORED_EXTENSIONS: set[str] = {
-        ".rdb", # Fichier de base de données Redis (ajout suite à la demande)
+        # Bases de données
+        ".rdb", ".db", ".sqlite", ".sqlite3", ".sqlitedb", ".db3",
+        # Images & Médias
+        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp", ".bmp", ".tiff",
+        ".mp3", ".mp4", ".wav", ".avi", ".mov",
+        # Polices
+        ".eot", ".ttf", ".woff", ".woff2", ".otf",
+        # Archives & Binaires compilés
+        ".zip", ".tar", ".gz", ".rar", ".7z",
+        ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe", ".bin", ".class", ".jar",
+        # Documents binaires
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"
+    }
+
+    # NOMS DE FICHIERS SPECIFIQUES A IGNORER SYSTEMATIQUEMENT (Lockfiles, etc.)
+    CRITICAL_IGNORED_BASENAMES: set[str] = {
+        "poetry.lock",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "uv.lock",
+        "Gemfile.lock",
+        "composer.lock",
+        "mix.lock",
+        "go.sum",
+        "Cargo.lock",
+        "dump.rdb", # Explicite au cas où l'extension manque
     }
 
     @staticmethod
@@ -67,12 +94,16 @@ class AnalysisProfile(abc.ABC):
     def is_always_ignored(path_in_zip: str, path_components: list[str]) -> bool:
         """
         Vérifie si le fichier doit être ignoré de manière inconditionnelle,
-        indépendamment du profil (ex: binaires critiques de base de données).
+        indépendamment du profil (ex: binaires critiques de base de données, lockfiles).
         """
         filename = path_components[-1]
         _, ext = os.path.splitext(filename)
 
-        # Vérification sur l'extension en minuscule
+        # 1. Vérification sur le nom exact (Lockfiles, etc.)
+        if filename in AnalysisProfile.CRITICAL_IGNORED_BASENAMES:
+            return True
+
+        # 2. Vérification sur l'extension en minuscule
         if ext.lower() in AnalysisProfile.CRITICAL_IGNORED_EXTENSIONS:
             return True
 
