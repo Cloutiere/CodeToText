@@ -1,5 +1,5 @@
 # analysis_profiles.py
-# [Version 2.2.3]
+# [Version 2.2.5]
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from collections.abc import Iterable
 import os
 
 # ==============================================================================
-# IMPORT DE LA CLASSE DE BASE DÉPLAÇÉE
+# IMPORT DE LA CLASSE DE BASE DÉPLACÉE
 # ==============================================================================
 from codetotext_core.profiles.base import AnalysisProfile
 
@@ -46,6 +46,10 @@ class AdminScolaireProfile(AnalysisProfile):
     def is_file_ignored(self, path_in_zip: str, path_components: list[str]) -> bool:
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
+
+        # NOUVELLE RÈGLE GLOBALE (RDB, etc.): Fichiers critiques à ignorer
+        if AnalysisProfile.is_always_ignored(path_in_zip, path_components):
+            return True
 
         filename_lower = path_components[-1].lower()
 
@@ -182,11 +186,17 @@ class ScenarioBuilderProfile(AnalysisProfile):
 
     IGNORED_DIRS_OR_COMPONENTS: set[str] = {
         ".git", ".github", ".ruff_cache", "__pycache__", "venv",
-        "instance", "attached_assets", "node_modules", "dist", "build", "tests"
+        "instance", 
+        "attached_assets", # AJOUT/CONFIRMATION : Dossier d'assets binaires (images, etc.) à ignorer.
+        "node_modules", "dist", "build", "tests"
     }
     SPECIFIC_FILES_TO_IGNORE: set[str] = {
-        "poetry.lock", "database.db", "lint.md", "replit.md", ".gitignore",
-        "package-lock.json"
+        "poetry.lock", 
+        "database.db", # AJOUT/CONFIRMATION : Fichier de base de données (SQLite par défaut)
+        "lint.md", "replit.md", ".gitignore",
+        "package-lock.json",
+        "backend/test.db", # AJOUT : Fichier de base de données spécifique pour les tests
+        "backend/instance/database.db", # AJOUT : Fichier de base de données spécifique dans le dossier instance
     }
     MIGRATIONS_BOILERPLATE: set[str] = {
         "README", "alembic.ini", "script.py.mako"
@@ -196,6 +206,10 @@ class ScenarioBuilderProfile(AnalysisProfile):
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
 
+        # RÈGLE GLOBALE (RDB, etc.): Fichiers critiques à ignorer
+        if AnalysisProfile.is_always_ignored(path_in_zip, path_components):
+            return True
+
         filename = path_components[-1]
         filename_lower = filename.lower()
 
@@ -204,9 +218,18 @@ class ScenarioBuilderProfile(AnalysisProfile):
         if filename_lower == "readme.md" and path_in_zip == "readme.md":
             return False
 
+        # Mise à jour pour s'assurer que les images et DB sont correctement ignorées, 
+        # y compris les nouveaux *.db spécifiques (qui sont maintenant dans SPECIFIC_FILES_TO_IGNORE)
+        # Note: 'image_test.png' et 'test_gemini_correct.png' sont couverts par la règle d'extension.
         if filename_lower.endswith((".png", ".ico", ".svg")): return True
         if filename_lower.endswith(".lock"): return True
-        if filename_lower.endswith(".db"): return True
+        # NOTE : Les fichiers *.db spécifiques sont gérés par SPECIFIC_FILES_TO_IGNORE
+        if filename_lower.endswith(".db"): 
+            # Si le fichier est un .db mais n'est pas dans la liste des specific files,
+            # on l'ignore quand même si son chemin d'accès n'est pas spécifié dans SPECIFIC_FILES_TO_IGNORE
+            # La liste SPECIFIC_FILES_TO_IGNORE est déjà vérifiée par `if path_in_zip in self.SPECIFIC_FILES_TO_IGNORE: return True`
+            # Cependant, on maintient la vérification par extension pour les fichiers .db génériques non listés par leur chemin complet
+            return True
         if filename_lower.endswith(".sql"): return True
 
         if filename_lower.endswith(".json"):
@@ -219,7 +242,8 @@ class ScenarioBuilderProfile(AnalysisProfile):
 
             return True 
 
-        if filename_lower in self.SPECIFIC_FILES_TO_IGNORE: return True
+        # Vérification des fichiers spécifiques (inclut les chemins complets de .db ajoutés)
+        if path_in_zip in self.SPECIFIC_FILES_TO_IGNORE: return True
 
         if any(comp in self.IGNORED_DIRS_OR_COMPONENTS for comp in path_components):
             if path_in_zip.startswith("scenario_builder_app/migrations/versions/"):
@@ -387,6 +411,10 @@ class CodeToTextProfile(AnalysisProfile):
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
 
+        # NOUVELLE RÈGLE GLOBALE (RDB, etc.): Fichiers critiques à ignorer
+        if AnalysisProfile.is_always_ignored(path_in_zip, path_components):
+            return True
+
         filename = path_components[-1]
         filename_lower = filename.lower()
 
@@ -410,9 +438,6 @@ class CodeToTextProfile(AnalysisProfile):
         if filename in self.SPECIFIC_FILES_TO_IGNORE:
             return True
 
-        # # Ignorer les fichiers internes de Replit si l'utilisateur les a inclus
-        # if filename in [".replit"]:
-        #     return True # Ils sont gérés génériquement par app.py
         # Règle AC-2 : Suppression de l'exclusion de .replit pour s'assurer qu'il est inclus
         # via AnalysisProfile.CRITICAL_CONFIG_BASENAMES.
 
@@ -514,6 +539,10 @@ class MermaidProfile(AnalysisProfile):
         # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
+
+        # NOUVELLE RÈGLE GLOBALE (RDB, etc.): Fichiers critiques à ignorer
+        if AnalysisProfile.is_always_ignored(path_in_zip, path_components):
+            return True
 
         filename = path_components[-1]
         filename_lower = filename.lower()
@@ -726,6 +755,10 @@ class CompleteProfile(AnalysisProfile):
         # Règle d'inclusion N°0: Inclusion globale pour les fichiers d'architecture spécifiques
         if AnalysisProfile.is_always_included(path_in_zip, path_components):
             return False
+
+        # NOUVELLE RÈGLE GLOBALE (RDB, etc.): Fichiers critiques à ignorer
+        if AnalysisProfile.is_always_ignored(path_in_zip, path_components):
+            return True
 
         filename_lower = path_components[-1].lower()
 

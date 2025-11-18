@@ -1,5 +1,5 @@
 # codetotext_core/profiles/base.py
-# [Version 2.0]
+# [Version 2.1]
 
 from __future__ import annotations
 
@@ -42,6 +42,11 @@ class AnalysisProfile(abc.ABC):
         "analysis_profiles.py", # Ce fichier lui-même, utile pour l'auto-analyse
     }
 
+    # EXTENSIONS CRITIQUES A IGNORER SYSTEMATIQUEMENT (ex: binaires, dumps de DB)
+    CRITICAL_IGNORED_EXTENSIONS: set[str] = {
+        ".rdb", # Fichier de base de données Redis (ajout suite à la demande)
+    }
+
     @staticmethod
     def is_always_included(path_in_zip: str, path_components: list[str]) -> bool:
         """
@@ -54,6 +59,21 @@ class AnalysisProfile(abc.ABC):
 
         # Check for DDA_V or MEMO_TECH_V prefix (case-insensitive check on the filename)
         if filename.upper().startswith("MEMO_TECH_V") or filename.upper().startswith("DDA_V"):
+            return True
+
+        return False
+
+    @staticmethod
+    def is_always_ignored(path_in_zip: str, path_components: list[str]) -> bool:
+        """
+        Vérifie si le fichier doit être ignoré de manière inconditionnelle,
+        indépendamment du profil (ex: binaires critiques de base de données).
+        """
+        filename = path_components[-1]
+        _, ext = os.path.splitext(filename)
+
+        # Vérification sur l'extension en minuscule
+        if ext.lower() in AnalysisProfile.CRITICAL_IGNORED_EXTENSIONS:
             return True
 
         return False
