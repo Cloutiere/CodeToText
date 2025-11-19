@@ -1,5 +1,5 @@
 # codetotext_core/profiles/base.py
-# [Version 2.2]
+# [Version 2.3]
 
 from __future__ import annotations
 
@@ -89,8 +89,10 @@ class AnalysisProfile(abc.ABC):
         """
         filename = path_components[-1]
 
-        # Check for DDA_V or MEMO_TECH_V prefix (case-insensitive check on the filename)
-        if filename.upper().startswith("MEMO_TECH_V") or filename.upper().startswith("DDA_V"):
+        # Check for DDA_V or MEMO_TECH_V pattern anywhere in filename (handles underscore prefixes)
+        # and ensure it's a markdown file
+        if (("DDA_V" in filename.upper() or "MEMO_TECH_V" in filename.upper()) 
+            and filename.lower().endswith('.md')):
             return True
 
         return False
