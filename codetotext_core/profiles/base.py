@@ -54,9 +54,14 @@ class AnalysisProfile(abc.ABC):
         ".eot", ".ttf", ".woff", ".woff2", ".otf",
         # Archives & Binaires compilés
         ".zip", ".tar", ".gz", ".rar", ".7z",
-        ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe", ".bin", ".class", ".jar",
+        ".pyc", ".pyo", ".pyds", ".so", ".dll", ".exe", ".bin", ".class", ".jar",
         # Documents binaires
         ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"
+    }
+
+    # SUFFIXES CRITIQUES A IGNORER SYSTEMATIQUEMENT (fichiers minifiés ou source maps)
+    CRITICAL_IGNORED_SUFFIXES: set[str] = {
+        ".min.js", ".min.css", ".map"
     }
 
     # NOMS DE FICHIERS SPECIFIQUES A IGNORER SYSTEMATIQUEMENT (Lockfiles, etc.)
@@ -105,6 +110,13 @@ class AnalysisProfile(abc.ABC):
 
         # 2. Vérification sur l'extension en minuscule
         if ext.lower() in AnalysisProfile.CRITICAL_IGNORED_EXTENSIONS:
+            return True
+
+        # 3. Nouveau niveau de filtrage : vérification des suffixes (fichiers minifiés)
+        # Cette vérification doit se faire avant de vérifier l'extension pour capturer
+        # des cas comme "bundled.min.js" où l'extension est .js mais le suffixe est .min.js
+        filename_lower = filename.lower()
+        if any(filename_lower.endswith(suffix) for suffix in AnalysisProfile.CRITICAL_IGNORED_SUFFIXES):
             return True
 
         return False

@@ -74,10 +74,15 @@ def _process_zip_file(
             path_components = path_for_filtering.split('/')
             filename_basename, filename_basename_lower = path_components[-1], path_components[-1].lower()
 
-            # --- DÉLÉGATION AU PROFIL ---
+            # --- ÉTAPE 1 : GATEKEEPER P_1 (Exclusion Impérative) ---
+            if AnalysisProfile.is_always_ignored(path_for_filtering, path_components):
+                continue  # Skip précoce des fichiers "garbage"
+            # --- FIN DU GATEKEEPER ---
+
+            # --- ÉTAPE 2 : LOGIQUE MÉTIER DU PROFIL ---
             if profile.is_file_ignored(path_for_filtering, path_components):
-                continue
-            # --- FIN DE LA DÉLÉGATION ---
+                continue  # Filtrage spécifique au projet
+            # --- FIN LOGIQUE MÉTIER ---
 
             # Logique de filtrage générique restante
             if filename_basename.startswith(".") and filename_basename != '.replit':
@@ -90,8 +95,9 @@ def _process_zip_file(
 
             new_filename_base = path_for_display.replace('/', '.') if basename_counts[filename_basename] > 1 else filename_basename
 
-            # AC-3: Ajout de ".py" à la liste des extensions à conserver même en mode textifié.
-            extensions_to_keep = {".tsx", ".css", ".html", ".js", ".json", ".py"}
+            # AC-3 + P_2 : Liste blanche des extensions critiques
+            # Assure la conservation des extensions même en mode textifié
+            extensions_to_keep = {".tsx", ".css", ".html", ".js", ".json", ".py", ".md"}
             _, ext = os.path.splitext(filename_basename_lower)
 
             if keep_original_extension or ext in extensions_to_keep or filename_basename_lower in ["package.json"]:
@@ -106,37 +112,39 @@ def _process_zip_file(
 
             zout.writestr(new_filename_in_zip, content)
 
-            if filename_basename_lower != "synthèse_développement.md":
+            # --- ÉTAPE 3 : CONTRÔLE DE CONCATÉNATION P_4 ---
+            # Exclut les documents d'architecture des consolidations
+            is_architecture_doc = AnalysisProfile.is_always_included(path_for_filtering, path_components)
+            if not is_architecture_doc:  # Condition P_4
                 try:
                     file_content_str = content.decode('utf-8', errors='replace')
                     language = get_language_from_filename(filename_basename)
-                    file_block = f"-- DEBUT DU FICHIER --\nChemin: {path_for_display}\nLangage: {language}\n-- CONTENU DU CODE --\n{file_content_str}\n-- FIN DU FICHIER --"
+                    file_block = f"-- DEBUT DU FICHIER --\nChemin: {path_for_display}\nLangage: {language}\n-- CONTENU DU CODE --\n{file_content_str}\n-- FIN DU FICHIER --\n"
                     full_code_content_parts.append(file_block)
                     if not filename_basename_lower.endswith('.css'):
                         full_code_sans_css_parts.append(file_block)
 
-                    # --- DÉLÉGATION AU PROFIL ---
+                    # Délégation au profil pour la catégorisation
                     categories = profile.categorize_file(path_for_filtering)
                     categorized_files.append((file_block, categories))
-                    # --- FIN DE LA DÉLÉGATION ---
 
                 except Exception as e:
                     app.logger.error(f"Erreur préparation contenu de {full_path_in_zip}: {e}")
+            # --- FIN CONTRÔLE P_4 ---
 
         if not full_code_content_parts:
             raise ValueError("Le fichier ZIP ne contenait aucun fichier traitable après filtrage.")
 
         zout.writestr("__arborescence.txt", tree_content.encode('utf-8'))
-        tree_block_for_code_complet = f"--- DEBUT DE L'ARBORESCENCE ---\n{tree_content}\n--- FIN DE L'ARBORESCENCE ---"
+        tree_block_for_code_complet = f"--- DEBUT DE L'ARBORESCENCE ---\n{tree_content}\n--- FIN DE L'ARBORESCENCE ---\n"
         final_full_code_content = [tree_block_for_code_complet] + full_code_content_parts
-        zout.writestr("__code_complet.txt", "\n\n".join(final_full_code_content).encode('utf-8'))
-        zout.writestr("__code_complet_sans_CSS.txt", "\n\n".join(full_code_sans_css_parts).encode('utf-8'))
+        zout.writestr("__code_complet.txt", "\n".join(final_full_code_content).encode('utf-8'))
+        zout.writestr("__code_complet_sans_CSS.txt", "\n".join(full_code_sans_css_parts).encode('utf-8'))
 
-        # --- DÉLÉGATION AU PROFIL ---
+        # Délégation au profil pour les fichiers consolidés
         consolidated_files = profile.generate_consolidated_files(categorized_files)
         for filename, content in consolidated_files.items():
             zout.writestr(filename, content.encode("utf-8"))
-        # --- FIN DE LA DÉLÉGATION ---
 
     output_zip_stream.seek(0)
     original_zip_name_base, _ = os.path.splitext(uploaded_filename)
@@ -216,7 +224,7 @@ def download_file(server_filename: str):
     """Route pour le téléchargement des fichiers traités."""
     user_filename = request.args.get('user_filename', server_filename)
     return send_from_directory(
-        app.config['DOWNLOAD_FOLDER'],
+        app.config["DOWNLOAD_FOLDER"],
         server_filename,
         as_attachment=True,
         download_name=user_filename
