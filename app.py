@@ -1,5 +1,5 @@
 # app.py
-# [Version 8.2]
+# [Version 8.3]
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def _process_zip_file(
                     if not filename_basename_lower.endswith('.css'):
                         full_code_sans_css_parts.append(file_block)
 
-                    # Délégation au profil pour la catégorisation
+                    # Délégation au profil pour la catégorisation (seulement si pas un doc d'architecture)
                     categories = profile.categorize_file(path_for_filtering)
                     categorized_files.append((file_block, categories))
 
