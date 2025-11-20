@@ -195,7 +195,7 @@ def index():
             timestamp = datetime.now().strftime("%y-%m-%d_%Hh%M")
             name_root, extension = os.path.splitext(base_output_filename)
             user_facing_filename = f"{name_root}_{timestamp}{extension}"
-            server_filename = f"{uuid.uuid4()}_{base_output_filename}"
+            server_filename = user_facing_filename  # Pas d'UUID, juste le timestamp
             save_path = os.path.join(app.config['DOWNLOAD_FOLDER'], server_filename)
             with open(save_path, 'wb') as f:
                 f.write(processed_stream.getbuffer())
